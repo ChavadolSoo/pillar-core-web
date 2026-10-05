@@ -1,7 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { ApiError, emptyPage, publicGet } from "@/lib/api";
-import type { MarketItem, MarketItemDetail, NewsDetail, NewsSummary, Paginated, SiteApp } from "@/lib/types";
+import { formPublicSend } from "@/lib/api";
+import type { MarketItem, MarketItemDetail, NewsDetail, NewsSummary, OrgProfile, Paginated, PublicForm, SiteApp } from "@/lib/types";
 
 /**
  * Shown while plc-portal cannot be reached, so the public site never renders
@@ -85,6 +86,37 @@ export async function getNews(params: { type?: string; app?: string; page?: numb
   } catch (e) {
     console.error("[content] news:", (e as Error).message);
     return emptyPage as Paginated<NewsSummary>;
+  }
+}
+
+/** Published web services (catalog rows of kind WEB). */
+export const getServices = cache(async (): Promise<SiteApp[]> => {
+  try {
+    return await publicGet<SiteApp[]>("/apps?kind=WEB");
+  } catch (e) {
+    console.error("[content] services:", (e as Error).message);
+    return [];
+  }
+});
+
+/** Public page of an organization, or null when the code is unknown. */
+export const getOrg = cache(async (code: string): Promise<OrgProfile | null> => {
+  try {
+    return await publicGet<OrgProfile>(`/orgs/${encodeURIComponent(code)}`, 30);
+  } catch (e) {
+    if (!(e instanceof ApiError && (e.status === 404 || e.status === 400))) console.error("[content] org:", (e as Error).message);
+    return null;
+  }
+});
+
+/** A shared form: "off" when it exists but does not take answers now. */
+export async function getPublicForm(token: string): Promise<PublicForm | "off" | null> {
+  try {
+    return await formPublicSend<PublicForm>("GET", `/forms/${encodeURIComponent(token)}`);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403) return "off";
+    if (!(e instanceof ApiError && (e.status === 404 || e.status === 400))) console.error("[content] form:", (e as Error).message);
+    return null;
   }
 }
 

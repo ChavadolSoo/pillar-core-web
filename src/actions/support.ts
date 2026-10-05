@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { ApiError, publicSend, userApi } from "@/lib/api";
+import { ApiError, publicSend, userApi, visitorHeaders } from "@/lib/api";
 import { getViewer } from "@/lib/session";
 import { TICKET_CATEGORIES, type Ticket } from "@/lib/types";
 
@@ -38,13 +38,16 @@ function apiMessage(e: unknown) {
 export async function submitTicket(_: TicketFormState, formData: FormData): Promise<TicketFormState> {
   const viewer = await getViewer();
   const app = String(formData.get("app_code") ?? "");
+  // An organization's contact page: always a guest ticket to that organization's helpdesk.
+  const org = String(formData.get("org") ?? "");
+  if (org && !/^[a-z0-9][a-z0-9-]{1,39}$/.test(org)) return { error: "invalid" };
   const parsed = ticketSchema.safeParse({
     app_code: app && app !== "other" ? app : null,
     category: formData.get("category"),
     subject: formData.get("subject"),
     message: formData.get("message"),
     contact_name: formData.get("contact_name") || viewer?.name || "",
-    contact_email: viewer?.email || formData.get("contact_email"),
+    contact_email: (!org && viewer?.email) || formData.get("contact_email"),
     contact_phone: String(formData.get("contact_phone") ?? "") || undefined,
   });
   if (!parsed.success) {
@@ -56,6 +59,15 @@ export async function submitTicket(_: TicketFormState, formData: FormData): Prom
     return { fields };
   }
   try {
+    if (org) {
+      const res = await publicSend<{ ticket: Ticket; access_token: string }>(
+        "POST",
+        `/orgs/${org}/tickets`,
+        { ...parsed.data, app_code: undefined },
+        await visitorHeaders(),
+      );
+      return { ok: true, number: res.ticket.number, token: res.access_token };
+    }
     if (viewer) {
       // The account's e-mail is taken from the token.
       const { app_code, category, subject, message, contact_name, contact_phone } = parsed.data;

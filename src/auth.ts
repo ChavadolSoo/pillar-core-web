@@ -9,6 +9,8 @@ declare module "next-auth" {
     error?: "SessionExpired";
     /** Keycloak organizations (1 organization = 1 tenant) the user belongs to. */
     organizations: string[];
+    /** Keycloak realm roles, e.g. tenant-admin */
+    roles: string[];
   }
 }
 
@@ -20,6 +22,7 @@ declare module "next-auth/jwt" {
     /** Unix seconds */
     expires_at?: number;
     organizations?: string[];
+    roles?: string[];
     error?: "SessionExpired";
   }
 }
@@ -36,6 +39,17 @@ export function organizationsOf(accessToken: string | undefined): string[] {
   }
 }
 
+/** Realm roles of an access token. */
+export function rolesOf(accessToken: string | undefined): string[] {
+  if (!accessToken) return [];
+  try {
+    const roles = (decodeJwt(accessToken) as { realm_access?: { roles?: unknown } }).realm_access?.roles;
+    return Array.isArray(roles) ? roles.filter((r): r is string => typeof r === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Auth.js with the Keycloak client `pillar-web` (realm pillarcore). Everything
  * about accounts happens on Keycloak: e-mail sign-up with e-mail verification,
@@ -45,7 +59,7 @@ export function organizationsOf(accessToken: string | undefined): string[] {
  * Sessions are encrypted JWT cookies (no database). Keycloak tokens live only
  * inside that cookie; the session the browser can read carries no token.
  */
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   trustHost: true,
   session: { strategy: "jwt", maxAge: 10 * 60 * 60 },
   providers: [
@@ -58,7 +72,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, account }) {
+    async jwt({ token, account, trigger }) {
       if (account) {
         return {
           ...token,
@@ -67,10 +81,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id_token: account.id_token ?? null,
           expires_at: account.expires_at,
           organizations: organizationsOf(account.access_token),
+          roles: rolesOf(account.access_token),
           error: undefined,
         };
       }
-      if (!token.refresh_token || !needsRefresh(token.expires_at)) return token;
+      // `unstable_update()` (e.g. right after opening an organization) asks
+      // Keycloak for a fresh token, so new memberships and roles show at once.
+      const forced = trigger === "update";
+      if (!token.refresh_token || (!forced && !needsRefresh(token.expires_at))) return token;
       try {
         const fresh = await refreshTokens(token.refresh_token);
         return {
@@ -78,6 +96,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           ...fresh,
           id_token: fresh.id_token ?? token.id_token,
           organizations: organizationsOf(fresh.access_token),
+          roles: rolesOf(fresh.access_token),
         };
       } catch (e) {
         if (e instanceof SessionExpiredError) return { ...token, access_token: undefined, error: "SessionExpired" };
@@ -88,6 +107,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     session({ session, token }) {
       session.user.id = token.sub ?? "";
       session.organizations = token.organizations ?? [];
+      session.roles = token.roles ?? [];
       session.error = token.error;
       return session;
     },
