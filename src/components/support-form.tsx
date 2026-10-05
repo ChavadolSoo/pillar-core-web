@@ -19,12 +19,15 @@ export function SupportForm({
   t,
   viewer,
   defaultApp,
+  org,
 }: {
   apps: AppOption[];
   lang: Locale;
   t: Pick<Dictionary, "support" | "common" | "account">;
   viewer: { name: string; email: string } | null;
   defaultApp?: string;
+  /** Contact page of an organization: no app choice, sent to its helpdesk as a guest */
+  org?: { code: string };
 }) {
   const [state, action, pending] = useActionState(submitTicket, undefined);
   const [app, setApp] = useState(defaultApp ?? "");
@@ -77,6 +80,8 @@ export function SupportForm({
   return (
     <form action={action} className="space-y-6">
       <input type="hidden" name="app_code" value={app} />
+      {org && <input type="hidden" name="org" value={org.code} />}
+      {!org && (
       <fieldset>
         <legend className="mb-3 text-sm font-medium">{s.app}</legend>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -103,6 +108,7 @@ export function SupportForm({
           ))}
         </div>
       </fieldset>
+      )}
 
       <div className="grid gap-5 sm:grid-cols-2">
         <Field label={s.category} htmlFor="category" error={err("category")}>
@@ -123,33 +129,35 @@ export function SupportForm({
         <textarea id="message" name="message" required minLength={10} maxLength={5000} rows={6} className={cn(inputClass, "resize-y")} />
       </Field>
 
-      {viewer ? (
+      {viewer && !org ? (
         <p className="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">{fill(s.signedInAs, { email: viewer.email })}</p>
       ) : (
         <>
           <div className="grid gap-5 sm:grid-cols-2">
             <Field label={s.name} htmlFor="contact_name" error={err("contact_name")}>
-              <input id="contact_name" name="contact_name" required maxLength={120} autoComplete="name" className={inputClass} />
+              <input id="contact_name" name="contact_name" required maxLength={120} autoComplete="name" defaultValue={viewer?.name} className={inputClass} />
             </Field>
             <Field label={s.email} htmlFor="contact_email" error={err("contact_email")}>
-              <input id="contact_email" name="contact_email" type="email" required autoComplete="email" className={inputClass} />
+              <input id="contact_email" name="contact_email" type="email" required autoComplete="email" defaultValue={viewer?.email} className={inputClass} />
             </Field>
           </div>
           <Field label={s.phone} htmlFor="contact_phone">
             <input id="contact_phone" name="contact_phone" type="tel" maxLength={30} autoComplete="tel" className={inputClass} />
           </Field>
+          {!org && (
           <p className="text-sm text-muted-foreground">
             {s.guestNote}{" "}
             <Link href={`${href(lang, "/login")}?callbackUrl=${encodeURIComponent(href(lang, "/support"))}`} className="font-medium text-primary hover:underline">
               {s.guestSignIn}
             </Link>
           </p>
+          )}
         </>
       )}
 
       {state && !state.ok && state.error && <Alert tone="danger">{state.error}</Alert>}
 
-      <button type="submit" disabled={pending || !app} className={button({ variant: "brand", size: "lg", className: "w-full sm:w-auto" })}>
+      <button type="submit" disabled={pending || (!app && !org)} className={button({ variant: "brand", size: "lg", className: "w-full sm:w-auto" })}>
         {pending ? <LoaderCircle className="animate-spin" /> : <Send />}
         {pending ? s.sending : s.submit}
       </button>

@@ -12,10 +12,13 @@ export function ReplyForm({
   action,
   fields,
   labels,
+  children,
 }: {
   action: (state: ReplyState, formData: FormData) => Promise<ReplyState>;
   fields: Record<string, string>;
   labels: { placeholder: string; send: string };
+  /** Extra controls next to the send button */
+  children?: React.ReactNode;
 }) {
   const ref = useRef<HTMLFormElement>(null);
   const [state, formAction, pending] = useActionState(async (prev: ReplyState, formData: FormData) => {
@@ -37,7 +40,10 @@ export function ReplyForm({
         className={cn(inputClass, "resize-y border-0 bg-transparent focus:ring-0")}
       />
       <div className="flex items-center justify-between gap-3 px-2 pb-1">
-        <p className="text-sm text-danger">{state?.error}</p>
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          {children}
+          <p className="text-sm text-danger">{state?.error}</p>
+        </div>
         <button type="submit" disabled={pending} className={button({ variant: "brand", size: "sm" })}>
           {pending ? <LoaderCircle className="animate-spin" /> : <Send />}
           {labels.send}

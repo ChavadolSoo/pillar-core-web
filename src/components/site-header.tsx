@@ -12,12 +12,14 @@ export async function SiteHeader() {
   const [{ lang, t }, viewer] = await Promise.all([getDictionary(), getViewer()]);
   const items = [
     { href: href(lang, "/"), label: t.nav.home },
+    { href: href(lang, "/services"), label: t.nav.services },
     { href: href(lang, "/apps"), label: t.nav.apps },
     { href: href(lang, "/marketplace"), label: t.nav.marketplace },
     { href: href(lang, "/news"), label: t.nav.news },
     { href: href(lang, "/support"), label: t.nav.support },
   ];
   const accountLinks = [
+    { href: href(lang, "/workspace"), label: t.nav.workspace },
     { href: href(lang, "/account"), label: t.account.overview },
     { href: href(lang, "/account/purchases"), label: t.account.purchases },
     { href: href(lang, "/account/orders"), label: t.account.orders },

@@ -22,7 +22,11 @@ export type SiteApp = {
   status: "AVAILABLE" | "COMING_SOON";
   featured: boolean;
   sort_order: number;
+  /** APP: store app; WEB: service used on this website */
+  kind?: ServiceKind;
 };
+
+export type ServiceKind = "APP" | "WEB";
 
 export type NewsType = "NEWS" | "FEATURE" | "NEW_APP" | "ANNOUNCEMENT";
 export type NewsSummary = {
@@ -108,6 +112,115 @@ export type TicketReply = {
   internal: boolean;
   created_at: string;
 };
-export type Ticket = TicketSummary & { message: string; contact_phone: string | null; replies: TicketReply[] };
+export type Ticket = TicketSummary & { message: string; contact_phone: string | null; replies: TicketReply[]; version: number };
 
 export type MeSummary = { tickets_open: number; orders: number; entitlements: number };
+
+// ---------------------------------------------------------------- organizations and web services
+
+/** A catalog row as the caller's organization sees it (GET /api/portal/catalog). */
+export type CatalogItem = {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  color: string;
+  category: string;
+  kind: ServiceKind;
+  status: "ACTIVE" | "NOT_INSTALLED" | "COMING_SOON";
+};
+
+export type Organization = { id: string; code: string; name: string; status: string };
+
+/** Public page of an organization. */
+export type OrgProfile = { code: string; name: string; services: string[] };
+
+// ---------------------------------------------------------------- forms (plc-form)
+
+/** {"th": "...", "en": "..."} or a plain string */
+export type LocalText = string | Record<string, string>;
+
+export type FormFieldType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "select"
+  | "multi_select"
+  | "date"
+  | "boolean"
+  | "file"
+  | "photo"
+  | "note"
+  | (string & {});
+
+export type FormField = {
+  key: string;
+  type: FormFieldType;
+  label?: LocalText;
+  hint?: LocalText;
+  required?: boolean;
+  options?: { value: string; label?: LocalText }[];
+  max_count?: number;
+  [extra: string]: unknown;
+};
+
+export type FormSection = { key: string; title?: LocalText; description?: LocalText; fields: FormField[] };
+export type FormSchema = { version?: number; title_field?: string; sections: FormSection[] };
+
+export type FormVersionSummary = { id: string; number: number; status: "DRAFT" | "PUBLISHED" | "RETIRED"; published_at: string | null };
+
+export type FormSummary = {
+  id: string;
+  app_code: string;
+  code: string;
+  name: Record<string, string>;
+  description: Record<string, string> | null;
+  published_version: number | null;
+  public: boolean;
+  public_token: string | null;
+  versions?: FormVersionSummary[];
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type FormVersion = FormVersionSummary & {
+  form_id: string;
+  schema: FormSchema;
+  problems: { path: string; message: string }[];
+};
+
+export type SubmissionAttachment = {
+  id: string;
+  field_key: string;
+  mime: string;
+  size: number;
+  file_name: string | null;
+  status: string;
+  url?: string;
+};
+
+export type Submission = {
+  id: string;
+  form_id: string;
+  version_number: number;
+  submitted_by: string;
+  title: string | null;
+  data: Record<string, unknown>;
+  received_at: string;
+  attachments?: SubmissionAttachment[];
+};
+
+/** A form shared as a public link. */
+export type PublicForm = {
+  name: I18nText;
+  description: I18nText | null;
+  organization: { code: string; name: string } | null;
+  form_version_id: string;
+  schema: FormSchema;
+  max_file_bytes: number;
+};
+
+/** Per-field answer errors of a 422 (code like "validation.required"). */
+export type FieldErrors = Record<string, { code: string; args?: Record<string, string> }>;

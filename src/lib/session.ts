@@ -15,6 +15,8 @@ export type Viewer = {
   organizations: string[];
   /** Organization the user acts in (cookie), when they belong to several. */
   tenant: string | null;
+  /** Admin of their organization (realm role tenant-admin or platform-admin) */
+  isOrgAdmin: boolean;
 };
 
 /** The signed-in user for the UI, or null. Memoized per request. */
@@ -30,6 +32,7 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
     image: session.user.image ?? null,
     organizations,
     tenant: chosen && organizations.includes(chosen) ? chosen : (organizations[0] ?? null),
+    isOrgAdmin: (session.roles ?? []).some((r) => r === "tenant-admin" || r === "platform-admin"),
   };
 });
 

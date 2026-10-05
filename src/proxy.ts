@@ -14,7 +14,8 @@ function preferredLocale(cookie: string | undefined, acceptLanguage: string | nu
 
 /**
  * 1. Every page lives under /th or /en: redirect paths without a locale.
- * 2. /[lang]/account needs a session (optimistic check; pages verify again).
+ * 2. /[lang]/account and /[lang]/workspace need a session (optimistic check;
+ *    pages verify again).
  * Wrapped in auth() so an expiring Keycloak token is refreshed and the
  * session cookie re-written on navigation.
  */
@@ -28,7 +29,7 @@ export const proxy = auth((request) => {
   }
 
   const signedIn = !!request.auth?.user && !request.auth.error;
-  if (!signedIn && /^\/(th|en)\/account(\/|$)/.test(pathname)) {
+  if (!signedIn && /^\/(th|en)\/(account|workspace)(\/|$)/.test(pathname)) {
     const login = new URL(`/${first}/login`, request.url);
     login.searchParams.set("callbackUrl", `${pathname}${search}`);
     if (request.auth?.error) login.searchParams.set("error", "SessionExpired");

@@ -1,4 +1,5 @@
 import "server-only";
+import { headers } from "next/headers";
 import { getAccessToken, getViewer } from "@/lib/session";
 
 /** plc-gateway answered with an error (NestJS `{ statusCode, error, message }`). */
@@ -6,6 +7,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The whole error body, e.g. per-field `errors` of a 422 */
+    readonly body: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -18,20 +21,20 @@ export class SignInRequiredError extends ApiError {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "DELETE";
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
-const base = () => (process.env.API_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+export const apiBase = () => (process.env.API_BASE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 
 async function send<T>(path: string, init: RequestInit & { next?: NextFetchRequestConfig }): Promise<T> {
-  const res = await fetch(`${base()}${path}`, init);
+  const res = await fetch(`${apiBase()}${path}`, init);
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { message?: unknown };
+    const data = (await res.json().catch(() => ({}))) as { message?: unknown } & Record<string, unknown>;
     const message = Array.isArray(data.message)
       ? data.message.join(", ")
       : typeof data.message === "string"
         ? data.message
         : res.statusText;
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, data);
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -45,10 +48,20 @@ export function publicGet<T>(path: string, revalidate = 60): Promise<T> {
   return send<T>(`/api/portal/public${path}`, { next: { revalidate, tags: ["portal"] } });
 }
 
-export function publicSend<T>(method: Method, path: string, body?: unknown): Promise<T> {
+/** Public links of forms (plc-form), never cached: a link can be switched off. */
+export function formPublicSend<T>(method: Method, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
+  return send<T>(`/api/form/public${path}`, {
+    method,
+    headers: { ...headers, ...(body !== undefined && { "content-type": "application/json" }) },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+}
+
+export function publicSend<T>(method: Method, path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
   return send<T>(`/api/portal/public${path}`, {
     method,
-    headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+    headers: { ...headers, ...(body !== undefined && { "content-type": "application/json" }) },
     body: body !== undefined ? JSON.stringify(body) : undefined,
     cache: "no-store",
   });
@@ -69,6 +82,16 @@ export async function userApi<T>(method: Method, path: string, body?: unknown): 
     body: body !== undefined ? JSON.stringify(body) : undefined,
     cache: "no-store",
   });
+}
+
+/**
+ * The visitor's address for rate limits upstream: the X-Forwarded-For that
+ * Caddy put on the request to this site (the gateway appends ours).
+ */
+export async function visitorHeaders(): Promise<Record<string, string>> {
+  const h = await headers();
+  const ip = h.get("x-forwarded-for") ?? h.get("x-real-ip");
+  return ip ? { "x-forwarded-for": ip } : {};
 }
 
 /** Content for a public page: an empty value instead of an error page when the API is down. */
